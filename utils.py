@@ -64,3 +64,30 @@ def calc_windows(data_len, windows_length, windows_shift):
         windows[win_ind] = [win_ind * windows_shift, win_ind * windows_shift + windows_length]
     windows = windows.astype(np.int)
     return windows
+
+
+def parse_parser(parser):
+    in_args = vars(parser.parse_args())
+    args = {}
+    for val in parser._option_string_actions.values():
+        if val.type is bool:
+            args[val.dest] = bool(in_args[val.dest])
+        elif val.dest in in_args:
+            if type(in_args[val.dest]) is str:
+                args[val.dest] = in_args[val.dest].replace("'", '')
+            else:
+                args[val.dest] = in_args[val.dest]
+    return args
+
+
+class Bag(dict):
+    """ a dict with d.key short for d["key"]
+        d = Bag( k=v ... / **dict / dict.items() / [(k,v) ...] )  just like dict
+    """
+    # aka Dotdict
+    def __init__(self, *args, **kwargs):
+        dict.__init__( self, *args, **kwargs )
+        self.__dict__ = self
+
+    def __getnewargs__(self):  # for cPickle.dump( d, file, protocol=-1)
+        return tuple(self)

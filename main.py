@@ -1,24 +1,15 @@
 import numpy as np
-import traceback
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from itertools import combinations
-import librosa as lbr
-from librosa.display import specshow
 import pandas as pd
 import os.path as op
 import glob
 from collections import defaultdict, Counter
 from operator import itemgetter
 from tqdm import tqdm
-import copy
-from pprint import pprint
-from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import RocCurveDisplay
 from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
-from sklearn.utils import shuffle
 from sklearn.feature_selection import SelectKBest, mutual_info_classif
 import utils
 import songs_utils
@@ -30,7 +21,7 @@ TRAINING_FOL = op.join(PROJECT_FOL, 'PS1_wav')
 TESTING_FOL = op.join(PROJECT_FOL, 'PS2_wav')
 
 
-def read_midi_training_files(songs_fol, buffer_len=30, buffer_shift=10, songs_type='wav', n_jobs=4):
+def read_audio_files(songs_fol, buffer_len=30, buffer_shift=10, songs_type='wav', n_jobs=4):
     # https://github.com/mdeff/fma
     # https://github.com/mdeff/fma/blob/master/features.py
     is_training = songs_fol == TRAINING_FOL
@@ -235,7 +226,7 @@ def get_songs_names(features):
     return songs_names
 
 
-def test():
+def test(model_threshold=0.8, probs_cutoff=0.85):
     songs_features_test_fname = op.join(PROJECT_FOL, 'songs_features_testing.csv')
     figures_fol = utils.make_dir(op.join(PROJECT_FOL, 'figures_test_var'))
     all_scores, conf_mats = utils.load(op.join(PROJECT_FOL, 'all_train_scores.pkl')) # load classifiers scores
@@ -263,9 +254,7 @@ def test():
 
     for clf_name, model_probs_var in models_probs_var.items():
         score, max_probs_score, var_prob_score, roc_auc_ovo, roc_auc_ovr = calc_mean_scores(all_scores, clf_name)
-        # if np.isnan(score) or score * max_probs_score < 0.8:
-        #     continue
-        if clf_name not in ['MLP2']:
+        if np.isnan(score) or score * max_probs_score < model_threshold:
             continue
         model_mean_probs_var = np.array(model_probs_var).mean(0)
         model_mean_probs_max = np.array(models_probs_max[clf_name]).mean(0)
@@ -279,17 +268,11 @@ def test():
         songs_probs_var_mean = [np.mean(probs) for song_name, probs in songs_probs_var.items()]
 
         songs_scores = sorted([(np.mean(probs), song_name) for song_name, probs in songs_probs_max.items()
-                              if (np.mean(probs) < 0.85)])
+                              if (np.mean(probs) < probs_cutoff)])
         print('Classifier: {}'.format(clf_name))
         print(songs_scores)
 
-        # plt.figure()
-        # plt.hist([score for (score, _ ) in songs_scores], bins=30)
-        # plt.show()
-        # print('asdf')
-
         plot_certainty_scatter_plot(clf_name, songs_probs_max_mean, songs_probs_var_mean, figures_fol)
-    print('asdf')
 
 
 def plot_certainty_scatter_plot(clf_name, model_mean_probs_max, model_mean_probs_var, figures_fol):
@@ -387,11 +370,32 @@ if __name__ == '__main__':
     # https://www.kdnuggets.com/2020/02/audio-data-analysis-deep-learning-python-part-1.html
     # The features exatraction part is based on this github:
     # https://github.com/mdeff/fma
+    # A nice colab notebook
+    # https://colab.research.google.com/github/BShakhovsky/PolyphonicPianoTranscription/blob/master/4%20Piano%20Audio%20to%20Midi.ipynb#scrollTo=9R6T-cvgAG5N
 
-    songs_type, n_jobs = 'wav', 1
-    # read_midi_training_files(TRAINING_FOL, buffer_len=30, buffer_shift=30, songs_type=songs_type, n_jobs=n_jobs)
-    # read_midi_training_files(TESTING_FOL, buffer_len=30, buffer_shift=30, songs_type=songs_type, n_jobs=n_jobs)
-    train(features_selection_num=50, overwrite=True)
-    # test()
+    import argparse
+    parser = argparse.ArgumentParser(description='Musicnat')
+    parser.add_argument('-f', '--function', required=True)
+    parser.add_argument('--file_type', required=False, default='wav')
+    parser.add_argument('--buffer_len', required=False, default=30, type=int)
+    parser.add_argument('--buffer_shift', required=False, default=10, type=int)
+    parser.add_argument('--features_selection_num', required=False, default=50, type=int)
+    parser.add_argument('--model_threshold', required=False, default=0.8, type=float)
+    parser.add_argument('--probs_cutoff', required=False, default=0.85, type=float)
+    parser.add_argument('--n_jobs', required=False, default=1, type=int)
+    parser.add_argument('--overwrite', required=False, default=False, type=bool)
+    args = utils.Bag(utils.parse_parser(parser))
+
+    if args.function == 'read_audio_files':
+        read_audio_files(
+            TRAINING_FOL, buffer_len=args.buffer_len, buffer_shift=args.buffer_shift,
+            songs_type=args.file_type, n_jobs=args.n_jobs)
+        read_audio_files(
+            TESTING_FOL, buffer_len=args.buffer_len, buffer_shift=args.buffer_shift,
+            songs_type=args.file_type, n_jobs=args.n_jobs)
+    elif args.function == 'train':
+        train(features_selection_num=args.features_selection_num, overwrite=args.overwrite)
+    elif args.function == 'test':
+        test(model_threshold=args.model_threshold, probs_cutoff=args.probs_cutoff)
 
 

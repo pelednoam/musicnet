@@ -1,0 +1,18 @@
+name: musicnat
+channels:
+- conda-forge
+dependencies:
+- python>=3.8
+- pip
+- numpy<=1.21
+- scipy
+- pandas
+- matplotlib
+- scikit-learn
+- librosa
+- jupyter
+- jupyter_contrib_nbextensions
+- pycairo
+- PyGObject
+- ffmpeg-python
+- tqdm
